@@ -1,4 +1,5 @@
 # pytorch_forward_forward
+### NOTE: Forked from mohammadpz
 Implementation of forward-forward (FF) training algorithm - an alternative to back-propagation
 ---
 
