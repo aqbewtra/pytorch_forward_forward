@@ -7,14 +7,21 @@ from torchvision.datasets import MNIST
 from torchvision.transforms import Compose, ToTensor, Normalize, Lambda
 from torch.utils.data import DataLoader
 
+####### NOTE: ######
+# For future experiments, replace this functionl; load different dataset for performance analysis
 
+# Create dataloaders
 def MNIST_loaders(train_batch_size=50000, test_batch_size=10000):
 
+    # Define image transform: Turn image to Tensor, normalize data, and flatten the image to one two dimensions
     transform = Compose([
         ToTensor(),
         Normalize((0.1307,), (0.3081,)),
         Lambda(lambda x: torch.flatten(x))])
 
+    # Load data from MNIST dataset (train and test data)
+    # If downloaded, load from specified path
+    # Otherwise, download to local storage from PyTorch
     train_loader = DataLoader(
         MNIST('./data/', train=True,
               download=True,
@@ -43,23 +50,30 @@ class Net(torch.nn.Module):
 
     def __init__(self, dims):
         super().__init__()
+        # Store the layers in a list so each can be trained individually
         self.layers = []
+
+        # Append each new layer to the list
         for d in range(len(dims) - 1):
-            self.layers += [Layer(dims[d], dims[d + 1]).cuda()]
+            self.layers += [Layer(dims[d], dims[d + 1])] # .cuda()]
 
     def predict(self, x):
+        # This function calculates the amount of neural activity for each label
+        # The prediction retured is the integer label with the highest neural activity, or the "maximum goodness"
         goodness_per_label = []
-        for label in range(10):
-            h = overlay_y_on_x(x, label)
+        for label in range(10): # For each possible integer label:
+            h = overlay_y_on_x(x, label) # Overlay y on x as specified by Hinton
             goodness = []
+            # Calculate summed goodness for given label
             for layer in self.layers:
                 h = layer(h)
                 goodness += [h.pow(2).mean(1)]
             goodness_per_label += [sum(goodness).unsqueeze(1)]
         goodness_per_label = torch.cat(goodness_per_label, 1)
-        return goodness_per_label.argmax(1)
+        return goodness_per_label.argmax(1) # Return label with the max summed goodness
 
     def train(self, x_pos, x_neg):
+        # Train each layer in sequence amounts to training the whole network
         h_pos, h_neg = x_pos, x_neg
         for i, layer in enumerate(self.layers):
             print('training layer', i, '...')
@@ -69,13 +83,15 @@ class Net(torch.nn.Module):
 class Layer(nn.Linear):
     def __init__(self, in_features, out_features,
                  bias=True, device=None, dtype=None):
-        super().__init__(in_features, out_features, bias, device, dtype)
+        super().__init__(in_features, out_features, bias)
+        # Initialize hyperparameters and reusable functions
         self.relu = torch.nn.ReLU()
         self.opt = Adam(self.parameters(), lr=0.03)
         self.threshold = 2.0
         self.num_epochs = 1000
 
     def forward(self, x):
+        # Normalize x and pass x through the layer weights
         x_direction = x / (x.norm(2, 1, keepdim=True) + 1e-4)
         return self.relu(
             torch.mm(x_direction, self.weight.T) +
@@ -83,6 +99,7 @@ class Layer(nn.Linear):
 
     def train(self, x_pos, x_neg):
         for i in tqdm(range(self.num_epochs)):
+            # Pass positive and negative data through the layer weights; then take mean squared
             g_pos = self.forward(x_pos).pow(2).mean(1)
             g_neg = self.forward(x_neg).pow(2).mean(1)
             # The following loss pushes pos (neg) samples to
@@ -99,6 +116,7 @@ class Layer(nn.Linear):
 
     
 def visualize_sample(data, name='', idx=0):
+    # Plot samples
     reshaped = data[idx].cpu().reshape(28, 28)
     plt.figure(figsize = (4, 4))
     plt.title(name)
@@ -107,12 +125,15 @@ def visualize_sample(data, name='', idx=0):
     
     
 if __name__ == "__main__":
+
+    # Train network
+
     torch.manual_seed(1234)
     train_loader, test_loader = MNIST_loaders()
 
     net = Net([784, 500, 500])
     x, y = next(iter(train_loader))
-    x, y = x.cuda(), y.cuda()
+    # x, y = x.cuda(), y.cuda()
     x_pos = overlay_y_on_x(x, y)
     rnd = torch.randperm(x.size(0))
     x_neg = overlay_y_on_x(x, y[rnd])
@@ -125,6 +146,6 @@ if __name__ == "__main__":
     print('train error:', 1.0 - net.predict(x).eq(y).float().mean().item())
 
     x_te, y_te = next(iter(test_loader))
-    x_te, y_te = x_te.cuda(), y_te.cuda()
+    # x_te, y_te = x_te.cuda(), y_te.cuda()
 
     print('test error:', 1.0 - net.predict(x_te).eq(y_te).float().mean().item())
