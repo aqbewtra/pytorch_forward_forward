@@ -6,7 +6,7 @@ from torch.optim import Adam
 from torchvision.datasets import MNIST
 from torchvision.transforms import Compose, ToTensor, Normalize, Lambda
 from torch.utils.data import DataLoader
-
+from torchinfo import summary
 ####### NOTE: ######
 # For future experiments, replace this functionl; load different dataset for performance analysis
 
@@ -113,6 +113,23 @@ class Layer(nn.Linear):
             loss.backward()
             self.opt.step()
         return self.forward(x_pos).detach(), self.forward(x_neg).detach()
+    
+class BPNet(nn.Module):
+    def __init__(self, dims, num_classes=10):
+        super().__init__()
+
+        self.layers = []
+        self.relu = nn.ReLU()
+        self.softmax = nn.Softmax()
+
+        for d in range(len(dims) - 1):
+            self.layers += [nn.Linear(dims[d], dims[d + 1]), nn.LayerNorm(dims[d+1]), self.relu]
+        self.layers += [nn.Linear(dims[-1], num_classes)]
+        
+        self.f = nn.Sequential(*self.layers)
+
+    def forward(self, x):
+        return self.softmax(self.f(x))
 
     
 def visualize_sample(data, name='', idx=0):
@@ -122,6 +139,41 @@ def visualize_sample(data, name='', idx=0):
     plt.title(name)
     plt.imshow(reshaped, cmap="gray")
     plt.show()
+
+
+def train(model, device, train_loader, optimizer, loss_fn, epoch):
+    model.train()
+    for batch_idx, (data, target) in enumerate(train_loader):
+        data, target = data.to(device), target.to(device)
+        optimizer.zero_grad()
+        output = model(data)
+        loss = loss_fn(output, target)
+        loss.backward()
+        optimizer.step()
+        if batch_idx % 100 == 0:
+            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                epoch, batch_idx * len(data), len(train_loader.dataset),
+                100. * batch_idx / len(train_loader), loss.item()))
+
+
+def test(model, device, test_loader, loss_fn):
+    model.eval()
+    test_loss = 0
+    correct = 0
+    with torch.no_grad():
+        for data, target in test_loader:
+            data, target = data.to(device), target.to(device)
+            output = model(data)
+            test_loss += loss_fn(output, target).item()  # sum up batch loss
+            pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
+            correct += pred.eq(target.view_as(pred)).sum().item()
+
+    test_loss /= len(test_loader.dataset)
+
+    print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
+        test_loss, correct, len(test_loader.dataset),
+        100. * correct / len(test_loader.dataset)))
+
     
     
 if __name__ == "__main__":
@@ -131,7 +183,17 @@ if __name__ == "__main__":
     torch.manual_seed(1234)
     train_loader, test_loader = MNIST_loaders()
 
-    net = Net([784, 500, 500])
+    dims = [784, 500, 500]
+    num_classes = 10
+
+    
+
+    ff_net = Net(dims)
+    bp_net = BPNet(dims, num_classes)
+
+    """
+    ###### TRAIN FF ######
+
     x, y = next(iter(train_loader))
     # x, y = x.cuda(), y.cuda()
     x_pos = overlay_y_on_x(x, y)
@@ -141,11 +203,24 @@ if __name__ == "__main__":
     for data, name in zip([x, x_pos, x_neg], ['orig', 'pos', 'neg']):
         visualize_sample(data, name)
     
-    net.train(x_pos, x_neg)
+    ff_net.train(x_pos, x_neg)
 
-    print('train error:', 1.0 - net.predict(x).eq(y).float().mean().item())
+    print('train error:', 1.0 - ff_net.predict(x).eq(y).float().mean().item())
 
     x_te, y_te = next(iter(test_loader))
     # x_te, y_te = x_te.cuda(), y_te.cuda()
 
-    print('test error:', 1.0 - net.predict(x_te).eq(y_te).float().mean().item())
+    print('test error:', 1.0 - ff_net.predict(x_te).eq(y_te).float().mean().item())
+    """
+
+    ###### TRAIN BP ######
+
+    lr = .001
+    loss_fn = nn.CrossEntropyLoss()
+    opt = torch.optim.Adam(bp_net.parameters(), lr=lr)
+    epochs = 100
+    device = torch.device('cpu')
+
+    for epoch in range(epochs):
+        train(bp_net, device, train_loader, opt, loss_fn, epoch)
+        test(bp_net, device, test_loader, loss_fn)
