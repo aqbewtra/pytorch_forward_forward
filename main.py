@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 from torch.optim import Adam
-from torchvision.datasets import MNIST
+from torchvision.datasets import MNIST, CIFAR10, CIFAR100
 from torchvision.transforms import Compose, ToTensor, Normalize, Lambda
 from torch.utils.data import DataLoader
 from torchinfo import summary
@@ -30,6 +30,54 @@ def MNIST_loaders(train_batch_size=50000, test_batch_size=10000):
 
     test_loader = DataLoader(
         MNIST('./data/', train=False,
+              download=True,
+              transform=transform),
+        batch_size=test_batch_size, shuffle=False)
+
+    return train_loader, test_loader
+
+def CIFAR10_loaders(train_batch_size=25000, test_batch_size=10000):
+    # Define image transform: Turn image to Tensor, normalize data, and flatten the image to one two dimensions
+    transform = Compose([
+        ToTensor(),
+        Normalize((0.1307,), (0.3081,)),
+        Lambda(lambda x: torch.flatten(x))])
+
+    # Load data from CIFAR-10 dataset (train and test data)
+    # If downloaded, load from specified path
+    # Otherwise, download to local storage from PyTorch
+    train_loader = DataLoader(
+        CIFAR10('./data/', train=True,
+              download=True,
+              transform=transform),
+        batch_size=train_batch_size, shuffle=True)
+
+    test_loader = DataLoader(
+        CIFAR10('./data/', train=False,
+              download=True,
+              transform=transform),
+        batch_size=test_batch_size, shuffle=False)
+
+    return train_loader, test_loader
+
+def CIFAR100_loaders(train_batch_size=25000, test_batch_size=10000):
+    # Define image transform: Turn image to Tensor, normalize data, and flatten the image to one two dimensions
+    transform = Compose([
+        ToTensor(),
+        Normalize((0.1307,), (0.3081,)),
+        Lambda(lambda x: torch.flatten(x))])
+
+    # Load data from CIFAR-100 dataset (train and test data)
+    # If downloaded, load from specified path
+    # Otherwise, download to local storage from PyTorch
+    train_loader = DataLoader(
+        CIFAR100('./data/', train=True,
+              download=True,
+              transform=transform),
+        batch_size=train_batch_size, shuffle=True)
+
+    test_loader = DataLoader(
+        CIFAR100('./data/', train=False,
               download=True,
               transform=transform),
         batch_size=test_batch_size, shuffle=False)
