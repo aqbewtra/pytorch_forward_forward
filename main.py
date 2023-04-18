@@ -6,7 +6,7 @@ from torch.optim import Adam
 from torchvision.datasets import MNIST, CIFAR10, CIFAR100
 from torchvision.transforms import Compose, ToTensor, Normalize, Lambda
 from torch.utils.data import DataLoader
-from torchinfo import summary
+# from torchinfo import summary
 ####### NOTE: ######
 # For future experiments, replace this functionl; load different dataset for performance analysis
 
@@ -162,6 +162,8 @@ class Layer(nn.Linear):
             self.opt.step()
         return self.forward(x_pos).detach(), self.forward(x_neg).detach()
     
+
+# Create network for backpropogation optimization
 class BPNet(nn.Module):
     def __init__(self, dims, num_classes=10):
         super().__init__()
@@ -179,7 +181,7 @@ class BPNet(nn.Module):
     def forward(self, x):
         return self.softmax(self.f(x))
 
-    
+
 def visualize_sample(data, name='', idx=0):
     # Plot samples
     reshaped = data[idx].cpu().reshape(28, 28)
@@ -188,7 +190,7 @@ def visualize_sample(data, name='', idx=0):
     plt.imshow(reshaped, cmap="gray")
     plt.show()
 
-
+# Train network with backpropogation
 def train(model, device, train_loader, optimizer, loss_fn, epoch):
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
@@ -203,7 +205,7 @@ def train(model, device, train_loader, optimizer, loss_fn, epoch):
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader), loss.item()))
 
-
+# Test network for backpropogation; get avg. loss
 def test(model, device, test_loader, loss_fn):
     model.eval()
     test_loss = 0
@@ -229,21 +231,24 @@ if __name__ == "__main__":
     # Train network
 
     torch.manual_seed(1234)
+
+    # Load Dataset: MNSIT, CIFAR10, or CIFAR100
     train_loader, test_loader = MNIST_loaders()
 
+    # Define network dimensions for BOTH backprop and FF.
+    # Equivalent networks will be created.
     dims = [784, 500, 500]
     num_classes = 10
 
-    
-
+    # Define Networks
     ff_net = Net(dims)
     bp_net = BPNet(dims, num_classes)
 
-    """
+    
     ###### TRAIN FF ######
 
     x, y = next(iter(train_loader))
-    # x, y = x.cuda(), y.cuda()
+    x, y = x.cuda(), y.cuda()
     x_pos = overlay_y_on_x(x, y)
     rnd = torch.randperm(x.size(0))
     x_neg = overlay_y_on_x(x, y[rnd])
@@ -251,15 +256,16 @@ if __name__ == "__main__":
     for data, name in zip([x, x_pos, x_neg], ['orig', 'pos', 'neg']):
         visualize_sample(data, name)
     
+    # Train whole net with FF; Loop through individual layer training
     ff_net.train(x_pos, x_neg)
 
     print('train error:', 1.0 - ff_net.predict(x).eq(y).float().mean().item())
 
     x_te, y_te = next(iter(test_loader))
-    # x_te, y_te = x_te.cuda(), y_te.cuda()
+    x_te, y_te = x_te.cuda(), y_te.cuda()
 
     print('test error:', 1.0 - ff_net.predict(x_te).eq(y_te).float().mean().item())
-    """
+    
 
     ###### TRAIN BP ######
 
@@ -267,8 +273,9 @@ if __name__ == "__main__":
     loss_fn = nn.CrossEntropyLoss()
     opt = torch.optim.Adam(bp_net.parameters(), lr=lr)
     epochs = 100
-    device = torch.device('cpu')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+    # High level training loop
     for epoch in range(epochs):
         train(bp_net, device, train_loader, opt, loss_fn, epoch)
         test(bp_net, device, test_loader, loss_fn)
